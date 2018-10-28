@@ -18,17 +18,19 @@ if { \
     set platform "unk"
 }
 
-lappend auto_path [file join [file dirname [info script]] libs-${platform}-${bitness}] [file join [file dirname [info script]] libs-noarch]
+lappend auto_path \
+    [file join [file dirname [info script]] libs-${platform}-${bitness}] \
+    [file join [file dirname [info script]] libs-noarch]
 
 unset platform bitness
 
 package require http
 package require tdom
 package require tls    1.7
-package require logger
 package require ElectricCommander::Arguments
 package require ElectricCommander::ResponseHandler
 package require ElectricCommander::Logger
+package require ElectricCommander::Util
 
 package provide ElectricCommander 0.0.1
 
@@ -75,6 +77,8 @@ namespace eval ::ElectricCommander {
     variable Url
     variable SecureUrl
 
+    variable ServerInfo
+
     variable props
     variable log
 
@@ -84,23 +88,56 @@ namespace eval ::ElectricCommander {
 
         set ProtocolVersion 2.2
 
-        set log [::logger::init EC::[namespace tail [self]]]
+        if { [dict exists $args -ignoreEnvironment] } {
+            set props(ignoreEnvironment) [dict get $args -ignoreEnvironment]
+        } {
+            set props(ignoreEnvironment) 0
+        }
+
+        if { [dict exists $args -debug] } {
+            set log [::ElectricCommander::Logger::init EC::[namespace tail [self]] [dict get $args -debug]]
+        } {
+            set log [::ElectricCommander::Logger::init EC::[namespace tail [self]]]
+        }
 
         ${log}::debug "EC object created"
 
         set args [concat [list \
-            -secure     [expr { [info exists ::env(COMMANDER_SECURE)]?"$::env(COMMANDER_SECURE)":"1" }] \
-            -port       [expr { [info exists ::env(COMMANDER_PORT)]?"$::env(COMMANDER_PORT)":"8000" }] \
-            -securePort [expr { [info exists ::env(COMMANDER_HTTPS_PORT)]?"$::env(COMMANDER_HTTPS_PORT)":"8443" }] \
-            -server     [expr { [info exists ::env(COMMANDER_SERVER)]?"$::env(COMMANDER_SERVER)":"localhost" }] \
-            -timeout 180 -retryTimeout -1 -format xml -checkArgs 1 \
-            -dryRun 0 -abortOnError 1 -initialReconnectDelay 0.01 -backOffMultiplier 2 -maxReconnectDelay 30 -retry 0 \
-            -sessionId "" -responseFile "" -user "" \
+            -secure                [my getEnv "COMMANDER_SECURE" 1]           \
+            -port                  [my getEnv "COMMANDER_PORT" 8000]          \
+            -securePort            [my getEnv "COMMANDER_HTTPS_PORT" 8443]    \
+            -server                [my getEnv "COMMANDER_SERVER" "localhost"] \
+            -timeout               180  \
+            -format                xml  \
+            -checkArgs             1    \
+            -dryRun                0    \
+            -abortOnError          1    \
+            -initialReconnectDelay 0.01 \
+            -backOffMultiplier     2    \
+            -maxReconnectDelay     30   \
+            -retry                 0    \
+            -responseFile          ""   \
+            -user                  ""   \
+            -ignoreEnvironment     0    \
+            -debug                 0    \
         ] $args]
 
         set _response [ElectricCommander::ResponseHandler new [self]]
 
         my configure {*}$args
+
+        if { ![info exists props(retryTimeout)] } {
+
+            if { [my getEnv "COMMANDER_JOBSTEPID"] ne "" } {
+                set props(retryTimeout) [expr { 24 * 3600 }]
+                ${log}::debug "Inside job step, setting parameter \"retryTimeout\": $props(retryTimeout)"
+            } {
+                set props(retryTimeout) $props(timeout)
+                ${log}::debug "Standalone run, setting parameter \"retryTimeout\": $props(retryTimeout)"
+            }
+
+        }
+
         my configureUrls
 
     }
@@ -138,6 +175,8 @@ namespace eval ::ElectricCommander {
             -backoffmultiplier     backOffMultiplier
             -maxreconnectdelay     maxReconnectDelay
             -user                  User
+            -ignoreenvironment     ignoreEnvironment
+            -debug                 debug
         }
 
         if { [llength $args] } {
@@ -166,6 +205,34 @@ namespace eval ::ElectricCommander {
         }
 
         return [array get props]
+    }
+
+    method initSession { } {
+
+        if { [info exists props(sessionId)] } {
+            ${log}::debug "initSession - The session ID already defined"
+            return
+        }
+
+        if { [my getEnv "COMMANDER_SESSIONID"] ne "" } {
+
+            ${log}::debug "initSession - Found session in COMMANDER_SESSIONID"
+            set props(sessionId) [my getEnv "COMMANDER_SESSIONID"]
+
+        } elseif { [my getEnv "HTTP_COOKIE"] ne "" && [my getEnv "COMMANDER_HOME"] ne "" } {
+
+            ${log}::debug "initSession - Loading session from CGI context"
+
+            # TODO
+            error "initSession - Loading session from CGI context is not implemented"
+
+        } else {
+
+            ${log}::debug "initSession - Loading session from session file"
+            my findSession
+
+        }
+
     }
 
     method configureUrls { } {
@@ -199,179 +266,34 @@ namespace eval ::ElectricCommander {
 
     }
 
-    method makeEnvelope { requests { mode "" } { ignoreErrors "" } } {
-
-        if { $props(format) eq "json" } {
-            return -code error "Not implemented."
-        } {
-
-            set xml  [dom createDocument "requests"]
-            set root [$xml documentElement]
-            $root setAttribute version $ProtocolVersion
-            $root setAttribute timeout $props(timeout)
-
-            if { $props(sessionId) ne "" } {
-                $root setAttribute sessionId $props(sessionId)
-            }
-
-            if { $mode ne "" } {
-                $root setAttribute mode $mode
-            }
-
-            if { $ignoreErrors ne "" } {
-                $root setAttribute ignoreErrors $ignoreErrors
-            }
-
-            foreach request $requests {
-                $root appendXML $request
-            }
-
-            set envelope {<?xml version="1.0" encoding="UTF-8"?>}
-            append envelope "\n" [$root asXML]
-
-            $xml delete
-
-        }
-
-        return $envelope
-
+    # TODO
+    method configureUser { } {
+        error "[lindex [info level 0] 1] - is not implemented"
     }
 
-    method makeRequest { command parameters { ignoreErrors "" } } {
-
-        set requestId [incr RequestCount]
-
-#        if { $CallSite } {
-#
-#            set original $requestId
-#            append requestId "-[my callSite]"
-#
-#        }
-
-        if { $props(format) eq "json" } {
-            return -code error "Not implemented."
-        } {
-
-            set xml  [dom createDocument "request"]
-            set root [$xml documentElement]
-            $root setAttribute requestId $requestId
-
-            if { $ignoreErrors ne "" } {
-                $root setAttribute ignoreErrors $ignoreErrors
-            }
-
-            set commandNode [$xml createElement $command]
-            $root appendChild $commandNode
-
-            dict for { k v } $parameters {
-                set node [$xml createElement $k]
-                $node appendChild [$xml createTextNode $v]
-                $commandNode appendChild $node
-            }
-
-            set request [$root asXML]
-
-            $xml delete
-
-        }
-
-        return $request
-
+    # TODO
+    method readSessionFile { } {
+        error "[lindex [info level 0] 1] - is not implemented"
     }
 
-    method marshallCall { command suppliedRequired { suppliedOptional {} } } {
-
-        set flags    [::ElectricCommander::Arguments::get_flags    $command]
-        set required [::ElectricCommander::Arguments::get_required $command]
-        set ignoreErrors ""
-        array set parameters {}
-
-        set numRequiredArgs [llength $required]
-
-        if { [dict exists $flags minRequiredArgs] } {
-            set minRequiredArgs [dict get $flags minRequiredArgs]
-        } {
-            set minRequiredArgs $numRequiredArgs
-        }
-
-        if { [llength $suppliedRequired] < $minRequiredArgs || [llength $suppliedRequired] > $numRequiredArgs } {
-            set errmsg "Incorrect number of arguments to ElectricCommander::${command} "
-            append errmsg [join $required " "]
-            append errmsg " ?options?"
-            return -code error $errmsg
-        }
-
-        foreach k $required v $suppliedRequired {
-            set parameters($k) $v
-        }
-
-        if { [dict exists $suppliedOptional ignoreErrors] } {
-            set ignoreErrors [dict get $suppliedOptional ignoreErrors]
-            dict unset suppliedOptional ignoreErrors
-        }
-
-        dict for { k v } $suppliedOptional {
-            set parameters($k) $v
-        }
-
-        if { $props(checkArgs) } {
-            set validChoice [concat $required [::ElectricCommander::Arguments::get_optional $command]]
-            foreach param [array names parameters] {
-                if { [lsearch -exact $validChoice $param] == -1 } {
-                    set errmsg "Invalid option \"$param\" to ElectricCommander::${command}"
-                    append errmsg "\nMust be one of: [join $validChoice {, }]"
-                    return -code error $errmsg
-                }
-            }
-        }
-
-        if { [dict get $flags locator] } {
-            if { [info exists ::env(COMMANDER_JOBSTEPID)] && $::env(COMMANDER_JOBSTEPID) ne "" } {
-
-                set isIdentifierSupplied 0
-                foreach identifier $::ElectricCommander::objectIdentifiers {
-                    if { [info exists parameters($identifier)] } {
-                        set isIdentifierSupplied 1
-                        break
-                    }
-                }
-
-                if { [dict get $flags locator] == 2 || !$isIdentifierSupplied } {
-
-                   if { ![info exists parameters(jobStepId)] || $parameters(jobStepId) eq "" } {
-
-                       set parameters(jobStepId) $::env(COMMANDER_JOBSTEPID)
-
-                   }
-
-                }
-            }
-        }
-
-        return [my makeRequest $command [array get parameters] $ignoreErrors]
+    # TODO
+    method findSession { } {
+        error "[lindex [info level 0] 1] - is not implemented"
     }
 
-    method maskPassword { data } {
-        regsub -all {<password>.+?</password>} $data {<password>[PROTECTED]</password>} data
-        regsub -all {"password"\s*:\s*"[^""]*"} $data {"password":"[PROTECTED]"} data
-        return $data
+    # TODO
+    method loadSessionFile { } {
+        error "[lindex [info level 0] 1] - is not implemented"
     }
 
-    method truncateString { str { len 4096 } } {
-        if { [string length $str] > $len } {
-            set str [string range $str 0 [expr { $len - 1 }]]
-            append str "\n... Truncated at $len characters ..."
-        }
-        return $str
-    }
-
-    method getUrl { } {
-        return [expr { $props(secure)?"$SecureUrl":"$Url" }]
+    # TODO
+    method saveSessionFile { } {
+        error "[lindex [info level 0] 1] - is not implemented"
     }
 
     method httpPost { data } {
 
-        ${log}::debug "Send data:\n[my truncateString [my maskPassword $data]]"
+        ${log}::debug "Send data:\n[::ElectricCommander::Util::truncateString [::ElectricCommander::Util::maskSensitiveData $data]]"
 
         if { $props(dryRun) } {
             return
@@ -383,15 +305,7 @@ namespace eval ::ElectricCommander {
         $_response destroy
         set _response [ElectricCommander::ResponseHandler new [self]]
 
-        if { $props(retryTimeout) == -1 } {
-            if { [info exists ::env(COMMANDER_JOBSTEPID)] && $::env(COMMANDER_JOBSTEPID) ne "" } {
-                incr endTime [expr { 24 * 3600 }]
-            } {
-                incr endTime $props(timeout)
-            }
-        } {
-            incr endTime $props(retryTimeout)
-        }
+        incr endTime $props(retryTimeout)
 
         set firstAttempt 1
         while { 1 } {
@@ -419,7 +333,7 @@ namespace eval ::ElectricCommander {
 
             ${log}::debug "URL: $url"
 
-            set cmd [list ::http::geturl $url -timeout [expr { 1000 * $props(timeout) }] -method POST]
+            set cmd [list ::http::geturl $url -keepalive true -timeout [expr { 1000 * $props(timeout) }] -method POST]
             set headers [list]
 
             if { [info exists Attachments] } {
@@ -446,7 +360,7 @@ namespace eval ::ElectricCommander {
             }
             ::http::register https 443 [list ::tls::socket -ssl3 false -ssl2 false -tls1 true]
 
-            set start [clock seconds]
+            set start [clock milliseconds]
 
             ${log}::debug "Starting request with timeout = $props(timeout) secs"
             set requestStatus [catch $cmd token]
@@ -457,7 +371,7 @@ namespace eval ::ElectricCommander {
                 unset ::http::urlTypes(https)
             }
 
-            set elsaped [expr { [clock seconds] - $start }]
+            set elsaped [format "%.3f" [expr { 0.001 * ([clock milliseconds] - $start) }]]
 
             if { $props(responseFile) ne "" } {
                 close $fid
@@ -526,7 +440,7 @@ namespace eval ::ElectricCommander {
             if { [info exists errmsg] } {
                 ${log}::error $errmsg
 
-                if { $Retry } {
+                if { $props(retry) } {
                     if { [clock seconds] < $endTime } {
                         continue
                     }
@@ -545,7 +459,7 @@ namespace eval ::ElectricCommander {
                     my unsetSessionId
                 }
 
-                ${log}::debug "Response from server:\n[my truncateString [my maskPassword $responseData]]"
+                ${log}::debug "Response from server:\n[::ElectricCommander::Util::truncateString [::ElectricCommander::Util::maskSensitiveData $responseData]]"
 
                 $_response destroy
                 if { $props(format) eq "json" } {
@@ -595,9 +509,7 @@ namespace eval ::ElectricCommander {
                         set v [string range $v 1 end-1]
                     }
 
-                    if { $props(sessionId) ne $v } {
-                        my setSessionId $v
-                    }
+                    my setSessionId $v
 
                 }
 
@@ -615,17 +527,6 @@ namespace eval ::ElectricCommander {
 
     }
 
-    method checkAbort { } {
-
-        if { $ErrorMessage eq "" || !$props(abortOnError) } {
-            return
-        }
-
-        puts stderr $ErrorMessage
-        exit 1
-
-    }
-
     method sendRequests { requests { mode "" } { ignoreErrors "" } } {
 
         while { true } {
@@ -636,183 +537,911 @@ namespace eval ::ElectricCommander {
         return $result
     }
 
+    method makeRequest { command parameters { ignoreErrors "" } } {
+
+        set requestId [incr RequestCount]
+
+#        if { $CallSite } {
+#
+#            set original $requestId
+#            append requestId "-[my callSite]"
+#
+#        }
+
+        if { $props(format) eq "json" } {
+            return -code error "Not implemented."
+        } {
+
+            set xml  [dom createDocument "request"]
+            set root [$xml documentElement]
+            $root setAttribute requestId $requestId
+
+            if { $ignoreErrors ne "" } {
+                $root setAttribute ignoreErrors $ignoreErrors
+            }
+
+            set commandNode [$xml createElement $command]
+            $root appendChild $commandNode
+
+            dict for { k v } $parameters {
+                set node [$xml createElement $k]
+                $node appendChild [$xml createTextNode $v]
+                $commandNode appendChild $node
+            }
+
+            set request [$root asXML]
+
+            $xml delete
+
+        }
+
+        return $request
+
+    }
+
+    method makeEnvelope { requests { mode "" } { ignoreErrors "" } } {
+
+        if { $props(format) eq "json" } {
+            return -code error "Not implemented."
+        } {
+
+            set xml  [dom createDocument "requests"]
+            set root [$xml documentElement]
+            $root setAttribute version $ProtocolVersion
+            $root setAttribute timeout $props(timeout)
+
+            if { [info exists props(sessionId)] } {
+                $root setAttribute sessionId $props(sessionId)
+            }
+
+            if { $mode ne "" } {
+                $root setAttribute mode $mode
+            }
+
+            if { $ignoreErrors ne "" } {
+                $root setAttribute ignoreErrors $ignoreErrors
+            }
+
+            foreach request $requests {
+                $root appendXML $request
+            }
+
+            set envelope {<?xml version="1.0" encoding="UTF-8"?>}
+            append envelope "\n" [$root asXML]
+
+            $xml delete
+
+        }
+
+        return $envelope
+
+    }
+
+    # TODO
+    method checkAllErrors { } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method marshallCall { command args } {
+
+        set flags    [::ElectricCommander::Arguments::get_flags    $command]
+        set required [::ElectricCommander::Arguments::get_required $command]
+        set optional [::ElectricCommander::Arguments::get_optional $command]
+        set ignoreErrors ""
+        array set _args [my normalizeArguments {*}$args]
+
+        set numRequiredArgs [llength $required]
+
+        if { [dict exists $flags minRequiredArgs] } {
+            set minRequiredArgs [dict get $flags minRequiredArgs]
+        } {
+            set minRequiredArgs $numRequiredArgs
+        }
+
+        set count 1
+        foreach k $required {
+
+            if { ![info exists _args($k)] } {
+
+                set errmsg "Incorrect number of arguments to ElectricCommander::${command}"
+                foreach k $required { append errmsg " -$k <value>" }
+                if { [llength $optional] } {
+                    append errmsg " ?"
+                    foreach k $optional { append errmsg " -$k <value>" }
+                    append errmsg " ?"
+                }
+                return -code error $errmsg
+
+            }
+
+            if { [incr count] >= $minRequiredArgs } {
+                break
+            }
+
+        }
+
+        if { [info exists _args(ignoreErrors)] } {
+            set ignoreErrors $_args(ignoreErrors)
+            unset _args(ignoreErrors)
+        }
+
+        if { $props(checkArgs) } {
+            set validChoice [concat $required $optional]
+            foreach param [array names _args] {
+                if { [lsearch -exact $validChoice $param] == -1 } {
+                    set errmsg "Invalid option \"$param\" to ElectricCommander::${command}"
+                    append errmsg "\nMust be one of: [join $validChoice {, }]"
+                    return -code error $errmsg
+                }
+            }
+        }
+
+        if { [dict get $flags locator] } {
+            if { [my getEnv "COMMANDER_JOBSTEPID"] ne "" } {
+
+                set isIdentifierSupplied 0
+                foreach identifier $::ElectricCommander::objectIdentifiers {
+                    if { [info exists _args($identifier)] } {
+                        set isIdentifierSupplied 1
+                        break
+                    }
+                }
+
+                if { [dict get $flags locator] == 2 || !$isIdentifierSupplied } {
+
+                   if { ![info exists _args(jobStepId)] || $_args(jobStepId) eq "" } {
+
+                       set _args(jobStepId) [my getEnv "COMMANDER_JOBSTEPID"]
+
+                   }
+
+                }
+            }
+        }
+
+        tailcall my makeRequest $command [array get _args] $ignoreErrors
+    }
+
+    method setTimeout { {timeoutVal "" } } {
+
+        set oldTimeout $props(timeout)
+
+        if { $timeoutVal ne "" } {
+            my configure -timeout $timeoutVal -retryTimeout $timeoutVal
+        }
+
+        return $oldTimeout
+
+    }
+
+    method setFormat { formatVal } {
+
+        if { $formatVal in {xml json} } {
+
+            if { $formatVal eq "json" } {
+                # TODO
+                error "setFormat: 'json' format is not implemented"
+            }
+
+            my configure -format $formatVal
+
+        } {
+            error "setFormat: Unsupported format ${formatVal}. Must be one of 'xml' or 'json'"
+        }
+
+    }
+
     method setSessionId { sessionId } {
-        if { $sessionId ne "" && $sessionId ne $props(sessionId) } {
+
+        if { $sessionId eq "" } {
+            my unsetSessionId
+        } elseif { ![info exists props(sessionId)] || $sessionId ne $props(sessionId) } {
             my configure -sessionId $sessionId
         }
+
+    }
+
+    method abortOnError { { abortOnErrorVal "" } } {
+
+        if { $abortOnErrorVal ne "" } {
+            my configure -abortOnError $abortOnErrorVal
+        }
+
+        return $props(abortOnError)
+
+    }
+
+    # TODO
+    method setAbortDefault { abortDefaultVal } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method checkAbort { } {
+
+        if { $ErrorMessage eq "" || !$props(abortOnError) } {
+            return
+        }
+
+        puts stderr [string map [list "\n" "\n    "] $ErrorMessage]
+        exit 1
+
+    }
+
+    method getError { } {
+
+        set msg $ErrorMessage
+        set ErrorMessage ""
+
+        return $msg
+
+    }
+
+    method getCurrentUser { } {
+
+        return $props(User)
+
     }
 
     method unsetSessionId { } {
-        my configure -sessionId ""
+        unset -nocomplain props(sessionId)
+        ${log}::debug "Unset session ID"
     }
 
-}
+    method login { args } {
 
-::oo::define ElectricCommander { method login { userName password } {
+        set secure       $props(secure)
+        set abortOnError $props(abortOnError)
 
-    set secure       $props(secure)
-    set abortOnError $props(abortOnError)
+        if { [dict exists $args userName] } {
+            my configure -user [dict get $args userName]
+        } elseif { [dict exists $args -userName] } {
+            my configure -user [dict get $args -userName]
+        }
 
-    my configure -user $userName
-    my configure -abortOnError 0 -secure 1
+        my configure -abortOnError 0 -secure 1
 
-    set endTime [expr { [clock seconds] + $props(timeout) }]
+        set endTime [expr { [clock seconds] + $props(timeout) }]
 
-    while 1 {
+        while 1 {
 
-        set obj [my login_proc $userName $password]
+            set obj [my login_proc {*}$args]
 
-        if { [clock seconds] < $endTime } {
+            if { [clock seconds] < $endTime } {
 
-            if { [$obj type] eq "EMPTY" } {
+                if { [$obj type] eq "EMPTY" } {
+                    ${log}::warn "Server response was empty, retrying"
+                    update idle
+                    continue
+                }
+
+                set notReady 0
+                foreach error [$obj findErrors] {
+                    if { [dict get $error code] eq "ServerNotReady" } {
+                        ${log}::warn "Server not ready, retrying"
+                        set notReady 1
+                        break
+                    }
+                }
+                if { $notReady } {
+                    update idle
+                    continue
+                }
+
+            }
+
+            break
+
+        }
+
+        my configure -abortOnError $abortOnError -secure $secure
+        my checkAbort
+
+        if { [$obj type] eq "EMPTY" || [llength [$obj findErrors]] } {
+
+            set ErrorMessage "login message failed\n$ErrorMessage"
+            return $obj
+
+        }
+
+        my setSessionId [$obj findvalue "//sessionId"]
+
+        return $obj
+    }
+
+    method getServerStatus { args } {
+
+        set abortOnError $props(abortOnError)
+        set retry        $props(retry)
+        my configure -retry 1 -abortOnError 0
+
+        set endTime [expr { [clock seconds] + $props(timeout) }]
+
+        while 1 {
+
+            set obj [my getServerStatus_proc {*}$args]
+
+            if { [clock seconds] < $endTime && [$obj type] eq "EMPTY" } {
                 ${log}::warn "Server response was empty, retrying"
                 update idle
                 continue
             }
 
-            set notReady 0
-            foreach error [$obj findErrors] {
-                if { [dict get $error code] eq "ServerNotReady" } {
-                    ${log}::warn "Server not ready, retrying"
-                    set notReady 1
-                    break
-                }
-            }
-            if { $notReady } {
-                update idle
-                continue
-            }
+            break
 
         }
 
-        break
+        my configure -retry $retry -abortOnError $abortOnError
+        my checkAbort
 
-    }
-
-    my configure -abortOnError $abortOnError -secure $secure
-    my checkAbort
-
-    if { [$obj type] eq "EMPTY" || [llength [$obj findErrors]] } {
-
-        set ErrorMessage "login message failed\n$ErrorMessage"
         return $obj
 
     }
 
-    my setSessionId [$obj findvalue "//sessionId"]
+    method getDatabaseConfiguration { args } {
 
-    return $obj
-}}
+        set secure $props(secure)
+        my configure -secure 1
 
+        set obj [my getDatabaseConfiguration_proc {*}$args]
 
-::oo::define ElectricCommander { method getServerStatus { args } {
+        my configure -secure $secure
 
-    set abortOnError $props(abortOnError)
-    set retry        $props(retry)
-    my configure -retry 1 -abortOnError 0
-
-    set endTime [expr { [clock seconds] + $props(timeout) }]
-
-    while 1 {
-
-        set obj [my getServerStatus_proc {*}$args]
-
-        if { [clock seconds] < $endTime && [$obj type] eq "EMPTY" } {
-            ${log}::warn "Server response was empty, retrying"
-            update idle
-            continue
-        }
-
-        break
+        return $obj
 
     }
 
-    my configure -retry $retry -abortOnError $abortOnError
-    my checkAbort
+    method setDatabaseConfiguration { args } {
 
-    return $obj
+        set secure $props(secure)
+        my configure -secure 1
 
-}}
+        set obj [my setDatabaseConfiguration_proc {*}$args]
 
-::oo::define ElectricCommander { method getDatabaseConfiguration { args } {
+        my configure -secure $secure
 
-    set secure $props(secure)
-    my configure -secure 1
+        return $obj
 
-    set obj [my getDatabaseConfiguration_proc {*}$args]
+    }
 
-    my configure -secure $secure
 
-    return $obj
+    method createUser { args } {
 
-}}
+        set secure $props(secure)
+        my configure -secure 1
 
-::oo::define ElectricCommander { method setDatabaseConfiguration { args } {
+        set obj [my createUser_proc {*}$args]
 
-    set secure $props(secure)
-    my configure -secure 1
+        my configure -secure $secure
 
-    set obj [my setDatabaseConfiguration_proc {*}$args]
+        return $obj
 
-    my configure -secure $secure
+    }
 
-    return $obj
 
-}}
+    method modifyUser { args } {
 
-::oo::define ElectricCommander { method createUser { args } {
+        set secure $props(secure)
+        my configure -secure 1
 
-    set secure $props(secure)
-    my configure -secure 1
+        set obj [my modifyUser_proc {*}$args]
 
-    set obj [my createUser_proc {*}$args]
+        my configure -secure $secure
 
-    my configure -secure $secure
+        return $obj
 
-    return $obj
+    }
 
-}}
+    method runProcedure { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-::oo::define ElectricCommander { method modifyUser { args } {
+    method runProcess { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-    set secure $props(secure)
-    my configure -secure 1
+    method runServiceProcess { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-    set obj [my modifyUser_proc {*}$args]
+    method tearDown { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-    my configure -secure $secure
+    method tearDownEnvironment { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-    return $obj
+    method tearDownResource { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-}}
+    method tearDownResourcePool { args } {
+        tailcall my jobWaiter [self method] {*}$args
+    }
 
-# ------------------------------------------------------------------------
-# Miscellaneous wrapped operations
-# ------------------------------------------------------------------------
+    method jobWaiter { args } {
 
-::oo::define ElectricCommander { method clone { args } {
-    return [my clone_proc {*}$args]
-}}
+        set command [lindex $args 0]
+        set args    [my normalizeArguments {*}[lrange $args 1 end]]
 
-::oo::define ElectricCommander { method createJob { args } {
-    return [my createJob_proc {*}$args]
-}}
+        set result [my "${command}_proc" {*}$args]
 
-::oo::define ElectricCommander { method getUsers { args } {
-    return [my getUsers_proc {*}$args]
-}}
+        if { $ErrorMessage ne "" } {
+            return $result
+        }
 
-::oo::define ElectricCommander { method getGroups { args } {
-    return [my getGroups_proc {*}$args]
-}}
+        if { [dict exists $args pollInterval] } {
 
-::oo::define ElectricCommander { method modifyJob { args } {
-    return [my modifyJob_proc {*}$args]
-}}
+            set jobId [$result findvalue "//jobId"]
 
-::oo::define ElectricCommander { method getReleases { args } {
-    return [my getReleases_proc {*}$args]
-}}
+            tailcall my waitForJob $jobId [dict get $args timeout]
+
+        }
+
+        return $result
+
+    }
+
+    method includeFileHelper { command auxArgName originalArgName args } {
+
+        # TODO: Read values from files
+
+        set command "${command}_proc"
+
+        tailcall my $command {*}$args
+
+    }
+
+    # TODO
+    method loadArgFromFile { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method SnapshotHelper { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method getSnapshotEnvironments { args } {
+        tailcall my SnapshotHelper [self method] {*}$args
+    }
+
+    method getSnapshots { args } {
+        tailcall my SnapshotHelper [self method] {*}$args
+    }
+
+    method getSnapshot { args } {
+        tailcall my SnapshotHelper [self method] {*}$args
+    }
+
+    method createSnapshot { args } {
+        tailcall my SnapshotHelper [self method] {*}$args
+    }
+
+    method deleteSnapshot { args } {
+        tailcall my SnapshotHelper [self method] {*}$args
+    }
+
+    method modifySnapshot { args } {
+        tailcall my SnapshotHelper [self method] {*}$args
+    }
+
+    # TODO
+    method PluginHelper { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method EnvironmentInventoryHelper { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method getEnvironmentInventory { args } {
+        tailcall my EnvironmentInventoryHelper [self method] {*}$args
+    }
+
+    # TODO
+    method EnvironmentInventoryItemHelper { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method createEnvironmentInventoryItem { args } {
+        tailcall my EnvironmentInventoryItemHelper [self method] {*}$args
+    }
+
+    method modifyEnvironmentInventoryItem { args } {
+        tailcall my EnvironmentInventoryItemHelper [self method] {*}$args
+    }
+
+    method getEnvironmentInventoryItem { args } {
+        tailcall my EnvironmentInventoryItemHelper [self method] {*}$args
+    }
+
+    method deleteEnvironmentInventoryItem { args } {
+        tailcall my EnvironmentInventoryItemHelper [self method] {*}$args
+    }
+
+    method createPlugin { args } {
+        tailcall my PluginHelper [self method] {*}$args
+    }
+
+    # TODO
+    method FormalParameterHelper { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method getFormalParameter { args } {
+        tailcall my FormalParameterHelper [self method] {*}$args
+    }
+
+    method createFormalParameter { args } {
+        tailcall my FormalParameterHelper [self method] {*}$args
+    }
+
+    method deleteFormalParameter { args } {
+        tailcall my FormalParameterHelper [self method] {*}$args
+    }
+
+    method modifyFormalParameter { args } {
+        tailcall my FormalParameterHelper [self method] {*}$args
+    }
+
+    # TODO
+    method evalDsl { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method createApplicationFromDeploymentPackage { args } {
+        tailcall my includeFileHelper [self method] dslFile dslString {*}$args
+    }
+
+    # TODO
+    method createCatalogItem { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method modifyCatalogItem { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method createStep { args } {
+        tailcall my includeFileHelper [self method] commandFile command {*}$args
+    }
+
+    method modifyStep { args } {
+        tailcall my includeFileHelper [self method] commandFile command {*}$args
+    }
+
+    method createProperty { args } {
+        tailcall my includeFileHelper [self method] valueFile value {*}$args
+    }
+
+    method modifyProperty { args } {
+        tailcall my includeFileHelper [self method] valueFile value {*}$args
+    }
+
+    method setProperty { args } {
+        tailcall my includeFileHelper [self method] valueFile value {*}$args
+    }
+
+    method createEmailNotifier { args } {
+        tailcall my includeFileHelper [self method] formattingTemplateFile formattingTemplate {*}$args
+    }
+
+    method modifyEmailNotifier { args } {
+        tailcall my includeFileHelper [self method] formattingTemplateFile formattingTemplate {*}$args
+    }
+
+    method expandString { args } {
+        tailcall my includeFileHelper expandString valueFile value {*}$args
+    }
+
+    method getFullCredential { args } {
+
+        if { [set jobStepId [my getEnv "COMMANDER_JOBSTEPID"]] eq "" } {
+            set ErrorMessage "error: getFullCredential is only allowed when called from inside a running step"
+            my checkAbort
+            return
+        }
+
+        tailcall my getFullCredential_proc {*}$args -jobStepId $jobStepId
+
+    }
+
+    # TODO
+    method getSender { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method putFile { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method clone { args } {
+        tailcall my clone_proc {*}$args
+    }
+
+    method createJob { args } {
+        tailcall my createJob_proc {*}$args
+    }
+
+    method getUsers { args } {
+        tailcall my getUsers_proc {*}$args
+    }
+
+    method getGroups { args } {
+        tailcall my getGroups_proc {*}$args
+    }
+
+    method modifyJob { args } {
+        tailcall my modifyJob_proc {*}$args
+    }
+
+    method getReleases { args } {
+        tailcall my getReleases_proc {*}$args
+    }
+
+    method getWaitingTasks { args } {
+
+        set args [my normalizeArguments {*}$args]
+
+        if { [dict exists $args deployerTaskName] } {
+            dict set args taskName [dict get $args deployerTaskName]
+        }
+
+        tailcall my getWaitingTasks_proc {*}$args
+
+    }
+
+    method createDeployerConfiguration { args } {
+        tailcall my createDeployerConfiguration_proc {*}$args
+    }
+
+    method modifyDeployerConfiguration { args } {
+        tailcall my modifyDeployerConfiguration_proc {*}$args
+    }
+
+    method getDeployerConfiguration { args } {
+        tailcall my getDeployerConfiguration_proc {*}$args
+    }
+
+    method removeDeployerConfiguration { args } {
+        tailcall my removeDeployerConfiguration_proc {*}$args
+    }
+
+    method validateDeployer { args } {
+        tailcall my validateDeployer_proc {*}$args
+    }
+
+    # TODO
+    method putFiles { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method getFiles { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method throwError { { msg {} } } {
+
+        append ErrorMessage $msg
+        my checkAbort
+        ${log}::debug "error: $ErrorMessage"
+
+    }
+
+    # TODO
+    method import { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method doPromotePlugin { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method requireXml { op } {
+        if { $props(format) ne "xml" } {
+            error "$op is only supported with xml format"
+        }
+    }
+
+    # TODO
+    method promotePlugin { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method uninstallPlugin { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method installPlugin { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method attachFile { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method getServerInfo { args } {
+
+        set result [my getServerInfo_proc {*}$args]
+
+        if { $ErrorMessage ne "" } {
+            return $result
+        }
+
+        if { [llength [$result findErrors]] } {
+
+            set ErrorMessage "Unable to retrieve server connection information"
+            return $result
+
+        }
+
+        set values [$result findHash "//serverInfo"]
+
+        foreach k {putFileDestination jobEventsDestination} {
+            regsub {^(.*?)://} [dict get $values $k] {/\1/} tmp
+            dict set values $k $tmp
+        }
+
+        set ServerInfo $values
+
+        return $result
+
+    }
+
+    # TODO
+    method getStomp { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method releaseStomp { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method waitForFlowRuntime { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method waitForJob { jobId timeout { finalStatus {} } } {
+
+        if { $finalStatus eq "" } {
+            set finalStatus "completed"
+        }
+
+        if { ![regexp {^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$} $jobId] } {
+            set jobId [ \
+                [my expandString
+                    -value {$[/myJob/jobId]} \
+                    -jobId {b1788bd4-da31-11e8-9438-005056bb6bca}\
+                ] findvalue "//value"]
+        }
+
+        set destination "/topic/events.job"
+        set selector    "path = '/jobs/$jobId'"
+
+        if { $finalStatus eq "completed" } {
+
+            append selector " and status = 'completed'"
+
+        } elseif { $finalStatus ne "running" } {
+            set ErrorMessage "error: waitForJob called with a status other than 'running' or 'completed'"
+            my checkAbort
+            return
+        }
+
+        set result [my getJobStatus -jobId $jobId]
+
+        #TODO EventListener
+
+        return $result
+
+    }
+
+    # TODO
+    method newBatch { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method getUrl { } {
+        return [expr { $props(secure)?"$SecureUrl":"$Url" }]
+    }
+
+    # TODO
+    method sendEmail { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method loadProperties { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method cleanupArtifactCache { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method cleanupRepository { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method publishArtifactVersion { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method updateArtifactVersion { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method retrieveArtifactVersions { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    # TODO
+    method getManifest { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method initArtifactManagement { args } {
+        error "[lindex [info level 0] 1] - is not implemented"
+    }
+
+    method getPropertyValue { args } {
+
+        set result [my getProperty {*}$args]
+
+        if { ![llength [$result findErrors]] } {
+            return [$result findvalue "//value"]
+        }
+
+        return ""
+
+    }
+
+    method getEnv { var { default {} } } {
+
+        if { !$props(ignoreEnvironment) } {
+            return $default
+        }
+
+        if { ![info exists ::env($var)] } {
+            return $default
+        }
+
+        return $::env($var)
+
+    }
+
+    method normalizeArguments { args } {
+
+        set result [list]
+
+        foreach { k v } $args {
+            if { [string index $k 0] eq "-" } {
+                set k [string range $k 1 end]
+            }
+            lappend result $k $v
+        }
+
+        return $result
+
+    }
+
+}
 
 # ------------------------------------------------------------------------
 # API methods
@@ -837,15 +1466,13 @@ foreach command [::ElectricCommander::Arguments::all_commands] {
 
         ${log}::debug "Called API \"$command\"; args: $args"
 
-        if { [catch { set request [my marshallCall $command $args] } errmsg] } {
+        if { [catch { set request [my marshallCall $command {*}$args] } errmsg] } {
             return -code error $errmsg
         }
 
-        return [my sendRequests [list $request]]
+        tailcall my sendRequests [list $request]
 
     }]
 
-    unset flags method
+    unset flags method command
 }
-
-unset command

@@ -76,6 +76,17 @@ package provide ElectricCommander::ResponseHandler 0.0.1
     }
 
     method findHash { xpath } {
+
+        set values [dict create]
+
+        foreach node [$root selectNodes "${xpath}/*"] {
+
+            dict set values [$node nodeName] [[$node firstChild] nodeValue]
+
+        }
+
+        return $values
+
     }
 
     method findvalue { xpath } {
