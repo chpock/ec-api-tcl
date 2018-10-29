@@ -31,6 +31,7 @@ package require ElectricCommander::Arguments
 package require ElectricCommander::ResponseHandler
 package require ElectricCommander::Logger
 package require ElectricCommander::Util
+package require ElectricCommander::Dump
 
 package provide ElectricCommander 0.0.1
 
@@ -82,8 +83,6 @@ namespace eval ::ElectricCommander {
     variable props
     variable log
 
-    variable _response
-
     constructor { args } {
 
         set ProtocolVersion 2.2
@@ -122,8 +121,6 @@ namespace eval ::ElectricCommander {
             -debug                 0    \
         ] $args]
 
-        set _response [ElectricCommander::ResponseHandler new [self]]
-
         my configure {*}$args
 
         if { ![info exists props(retryTimeout)] } {
@@ -143,16 +140,7 @@ namespace eval ::ElectricCommander {
     }
 
     destructor {
-        $_response destroy
         ${log}::debug "EC object destroyed"
-    }
-
-    method response { args } {
-        if { [llength $args] } {
-            tailcall $_response {*}$args
-        } {
-            return $_response
-        }
     }
 
     method configure { args } {
@@ -301,10 +289,6 @@ namespace eval ::ElectricCommander {
 
         set delay $props(initialReconnectDelay)
         set endTime [clock seconds]
-
-        $_response destroy
-        set _response [ElectricCommander::ResponseHandler new [self]]
-
         incr endTime $props(retryTimeout)
 
         set firstAttempt 1
@@ -461,21 +445,20 @@ namespace eval ::ElectricCommander {
 
                 ${log}::debug "Response from server:\n[::ElectricCommander::Util::truncateString [::ElectricCommander::Util::maskSensitiveData $responseData]]"
 
-                $_response destroy
                 if { $props(format) eq "json" } {
                     return -code error "Not implemented."
                 } {
-                    set _response [ElectricCommander::ResponseHandler::XML new [self]]
+                    set response [ElectricCommander::ResponseHandler::XML new [self]]
                 }
 
-                if { ![my response parse $responseData] } {
+                if { ![$response parse $responseData] } {
                     set ErrorMessage "error: unrecognizable response from server:\n$responseData"
                     ${log}::error $ErrorMessage
                     break
                 }
 
                 set sep ""
-                foreach error [my response findErrors] {
+                foreach error [$response findErrors] {
                     if { [dict get $error code] eq "ServerNotReady" } {
                         ${log}::warn "Server not ready, retrying"
                         if { [clock seconds] < $endTime } {
@@ -523,7 +506,7 @@ namespace eval ::ElectricCommander {
             my checkAbort
         }
 
-        return [my response]
+        return $response
 
     }
 
@@ -1464,7 +1447,7 @@ foreach command [::ElectricCommander::Arguments::all_commands] {
             set command [string range $command 0 end-5]
         }
 
-        ${log}::debug "Called API \"$command\"; args: $args"
+        ${log}::info "API call \"$command\"; args: $args"
 
         if { [catch { set request [my marshallCall $command {*}$args] } errmsg] } {
             return -code error $errmsg

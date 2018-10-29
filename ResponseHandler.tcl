@@ -59,7 +59,7 @@ package provide ElectricCommander::ResponseHandler 0.0.1
 
             foreach child [$node childNodes] {
                 if { [$child hasChildNodes] } {
-                    dict set error [$child nodeName] [[$child firstChild] nodeValue]
+                    dict set error [$child nodeName] [$child text]
                 } {
                     dict set error [$child nodeName] ""
                 }
@@ -75,13 +75,19 @@ package provide ElectricCommander::ResponseHandler 0.0.1
     method findResponse { requestId } {
     }
 
+    method find { xpath } {
+
+        return [$root selectNodes $xpath]
+
+    }
+
     method findHash { xpath } {
 
         set values [dict create]
 
         foreach node [$root selectNodes "${xpath}/*"] {
 
-            dict set values [$node nodeName] [[$node firstChild] nodeValue]
+            dict set values [$node nodeName] [$node text]
 
         }
 
@@ -101,11 +107,16 @@ package provide ElectricCommander::ResponseHandler 0.0.1
             return ""
         }
 
-        return [[$node firstChild] nodeValue]
+        return [$node text]
 
+    }
+
+    method dump { } {
+        return [$root asXML]
     }
 
     destructor {
         $xml delete
     }
+
 }
