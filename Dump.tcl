@@ -72,7 +72,7 @@ namespace eval ::ElectricCommander::Dump::Export {
 
         }
 
-        #lappend result {*}[propertySheet $EC -projectName $projectName]
+        lappend result {*}[propertySheet $EC -projectName $projectName]
 
         return [list -project $projectName $result]
 
@@ -212,8 +212,6 @@ namespace eval ::ElectricCommander::Dump::Export {
 
             set result [list]
 
-            #puts "XPATH: $xpath"
-
             set countSheets [llength [$obj find "$xpath/propertySheet"]]
 
             for { set i 1 } { $i <= $countSheets } { incr i } {
@@ -223,8 +221,6 @@ namespace eval ::ElectricCommander::Dump::Export {
                 for { set j 1 } { $j <= $countProps } { incr j } {
 
                     set name [$obj findvalue "$xpath/propertySheet\[$i\]/property\[$j\]/propertyName"]
-
-                    #puts "$name $i $j [llength [$obj find "$xpath/propertySheet\[$i\]/property\[$j\]/propertySheet"]]"
 
                     if { [llength [$obj find "$xpath/propertySheet\[$i\]/property\[$j\]/propertySheet"]] } {
 
@@ -244,29 +240,15 @@ namespace eval ::ElectricCommander::Dump::Export {
 
                     }
 
-                    #puts "TMP: $tmp"
-
                 }
 
             }
-
-            #puts "RET: $result"
 
             return $result
 
         } [namespace current]]]
 
-#        set result [list]
-
-        set result [{*}$cmd $cmd $obj "/responses/response"]
-
-#        foreach { k v } [{*}$cmd $cmd $obj "/responses/response"] {
-#            lappend result -property [list $k {*}$v]
-#        }
-
-        #puts "X: $result"
-
-        return $result
+        return [{*}$cmd $cmd $obj "/responses/response"]
 
     }
 
