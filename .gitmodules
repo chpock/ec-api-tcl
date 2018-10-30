@@ -1,0 +1,3 @@
+[submodule "libs-noarch/procarg"]
+	path = libs-noarch/procarg
+	url = https://github.com/chpock/procarg.git

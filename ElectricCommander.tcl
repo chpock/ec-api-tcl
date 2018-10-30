@@ -967,9 +967,17 @@ namespace eval ::ElectricCommander {
 
     method includeFileHelper { command auxArgName originalArgName args } {
 
-        # TODO: Read values from files
-
         set command "${command}_proc"
+
+        set args [my normalizeArguments {*}$args]
+
+        if { [dict exist $args $auxArgName] } {
+            set fd [open [dict get $args $auxArgName] r]
+            fconfigure $fd -encoding utf-8 -translation lf
+            dict set args $originalArgName [read $fd]
+            dict unset args $auxArgName
+            close $fd
+        }
 
         tailcall my $command {*}$args
 
@@ -1069,9 +1077,12 @@ namespace eval ::ElectricCommander {
         tailcall my FormalParameterHelper [self method] {*}$args
     }
 
-    # TODO
     method evalDsl { args } {
-        error "[lindex [info level 0] 1] - is not implemented"
+
+        #TODO add support for parametersFile
+
+        tailcall my includeFileHelper [self method] dslFile dsl {*}$args
+
     }
 
     method createApplicationFromDeploymentPackage { args } {
@@ -1459,3 +1470,4 @@ foreach command [::ElectricCommander::Arguments::all_commands] {
 
     unset flags method command
 }
+
