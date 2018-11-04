@@ -26,4 +26,8 @@ namespace eval ::ElectricCommander::Util {
         return $str
     }
 
+    proc truncateAndMaskString { str { len 4096 } } {
+        return [truncateString [maskSensitiveData $str] $len]
+    }
+
 }

@@ -281,7 +281,7 @@ namespace eval ::ElectricCommander {
 
     method httpPost { data } {
 
-        ${log}::debug "Send data:\n[::ElectricCommander::Util::truncateString [::ElectricCommander::Util::maskSensitiveData $data]]"
+        ${log}::debug "Send data:\n[::ElectricCommander::Util::truncateAndMaskString $data]"
 
         if { $props(dryRun) } {
             return
@@ -327,7 +327,7 @@ namespace eval ::ElectricCommander {
                     return -code error "Not implemented."
                 } {
                     lappend cmd -type "text/xml; charset=utf-8"
-                    lappend cmd -query $data
+                    lappend cmd -query [encoding convertto utf-8 $data]
                 }
             }
 
@@ -342,6 +342,7 @@ namespace eval ::ElectricCommander {
             if { [info exists ::http::urlTypes(https)] } {
                 set savedSslHandler $::http::urlTypes(https)
             }
+
             ::http::register https 443 [list ::tls::socket -ssl3 false -ssl2 false -tls1 true]
 
             set start [clock milliseconds]
@@ -443,7 +444,7 @@ namespace eval ::ElectricCommander {
                     my unsetSessionId
                 }
 
-                ${log}::debug "Response from server:\n[::ElectricCommander::Util::truncateString [::ElectricCommander::Util::maskSensitiveData $responseData]]"
+                ${log}::debug "Response from server:\n[::ElectricCommander::Util::truncateAndMaskString $responseData]"
 
                 if { $props(format) eq "json" } {
                     return -code error "Not implemented."
@@ -747,6 +748,12 @@ namespace eval ::ElectricCommander {
 
         puts stderr [string map [list "\n" "\n    "] $ErrorMessage]
         exit 1
+
+    }
+
+    method getErrorInternal { } {
+
+        return $ErrorMessage
 
     }
 
@@ -1399,7 +1406,7 @@ namespace eval ::ElectricCommander {
         set result [my getProperty {*}$args]
 
         if { ![llength [$result findErrors]] } {
-            return [$result findvalue "//value"]
+            return [$result findvalue "/responses/response/property/value"]
         }
 
         return ""
@@ -1458,7 +1465,7 @@ foreach command [::ElectricCommander::Arguments::all_commands] {
             set command [string range $command 0 end-5]
         }
 
-        ${log}::info "API call \"$command\"; args: $args"
+        ${log}::info "API call \"$command\"; args: [join [lmap arg $args { ::ElectricCommander::Util::truncateAndMaskString $arg 256 }] { }]"
 
         if { [catch { set request [my marshallCall $command {*}$args] } errmsg] } {
             return -code error $errmsg

@@ -9,18 +9,118 @@ package provide ElectricCommanderX 0.0.1
 
     variable EC
 
+    variable Methods
+
     constructor { args } {
 
+        if { [llength $args] } {
+
+            if { [expr { [llength $args] % 2 }] != 0 } {
+                return -code error "ElectricCommanderX::constructor requires an even number of arguments"
+            }
+
+            set _args [list]
+
+            foreach { k v } $args {
+                if { $k eq "-default" } {
+                    set setDefault $v
+                } {
+                    lappend _args $k $v
+                }
+            }
+
+            set args $_args
+
+        }
+
         set EC [ElectricCommander new {*}$args]
+
+        if { [info exists setDefault] } {
+            my configure -default $setDefault
+        }
+
+        set Methods [concat \
+            [info object methods [self] -all] \
+            [info object methods $EC -all] \
+        ]
 
     }
 
     destructor {
+        my configure -default 0
         $EC destroy
     }
 
     method unknown { method args } {
         tailcall $EC $method {*}$args
+    }
+
+    method configure { args } {
+
+        if { [llength $args] } {
+
+            if { [expr { [llength $args] % 2 }] != 0 } {
+                return -code error "ElectricCommanderX::constructor requires an even number of arguments"
+            }
+
+            set _args [list]
+
+            foreach { k v } $args {
+                if { $k eq "-default" } {
+                    set setDefault $v
+                } {
+                    lappend _args $k $v
+                }
+            }
+
+            set args $_args
+
+        }
+
+        if { [info exists setDefault] } {
+
+            if { $setDefault } {
+
+                if { [info exists ::__ec_obj_unknown] } {
+                    $::__ec_obj_unknown configure -default 0
+                }
+
+                if { ![llength [info commands ::__ec_orig_unknown]] && [llength [info commands ::unknown]] } {
+                    rename ::unknown ::_ec_orig_unknown
+                }
+
+                set ::__ec_obj_unknown [self]
+
+                proc ::unknown { cmd args } {
+
+                    if { [$::__ec_obj_unknown methodExists $cmd] } {
+                        uplevel 1 [list $::__ec_obj_unknown $cmd {*}$args]
+                    } {
+                        uplevel 1 [list ::__ec_orig_unknown $cmd {*}$args]
+                    }
+
+                }
+
+            } {
+
+                if { [info exists ::__ec_obj_unknown] && [self] eq $::__ec_obj_unknown } {
+
+                    unset ::__ec_obj_unknown
+
+                    rename ::unknown ""
+
+                    if { [llength [info commands ::__ec_orig_unknown]] } {
+                        rename ::_ec_orig_unknown ::unknown
+                    }
+
+                }
+
+            }
+
+        }
+
+        tailcall $EC [self method] {*}$args
+
     }
 
     method login { userName password } {
@@ -40,7 +140,7 @@ package provide ElectricCommanderX 0.0.1
         {-environmentTemplateTierName string}
         {-environmentTierName         string}
         {-expand                      boolean}
-        {-extendedContextSearch       boolean}
+        {-extendedContextSearch       switch}
         {-flowName                    string}
         {-flowRuntimeName             string}
         {-flowRuntimeStateName        string}
@@ -145,7 +245,247 @@ package provide ElectricCommanderX 0.0.1
 
     }
 
-    method getProperty { propertyName {args {
+    method deleteProperty { propertyName {args {
+        {-applicationName             string}
+        {-applicationTierName         string}
+        {-artifactName                string}
+        {-artifactVersionName         string}
+        {-componentName               string}
+        {-configName                  string}
+        {-credentialName              string}
+        {-environmentName             string}
+        {-environmentTemplateName     string}
+        {-environmentTemplateTierName string}
+        {-environmentTierName         string}
+        {-extendedContextSearch       switch}
+        {-flowName                    string}
+        {-flowRuntimeName             string}
+        {-flowRuntimeStateName        string}
+        {-flowStateName               string}
+        {-flowTransitionName          string}
+        {-gatewayName                 string}
+        {-groupName                   string}
+        {-jobId                       commonId}
+        {-jobStepId                   commonId}
+        {-notifierName                string}
+        {-objectId                    commonId}
+        {-path                        string}
+        {-pipelineName                string}
+        {-pluginName                  string}
+        {-procedureName               string}
+        {-processName                 string}
+        {-processStepName             string}
+        {-projectName                 string}
+        {-propertySheetId             commonId}
+        {-releaseName                 string}
+        {-repositoryName              string}
+        {-resourceName                string}
+        {-resourcePoolName            string}
+        {-resourceTemplateName        string}
+        {-scheduleName                string}
+        {-snapshotName                string}
+        {-stageName                   string}
+        {-stateDefinitionName         string}
+        {-stateName                   string}
+        {-stepName                    string}
+        {-systemObjectName            string}
+        {-taskName                    string}
+        {-transitionDefinitionName    string}
+        {-transitionName              string}
+        {-userName                    string}
+        {-workflowDefinitionName      string}
+        {-workflowName                string}
+        {-workspaceName               string}
+        {-zoneName                    string}
+    }} } {
+
+        procarg::parse
+
+        set cmd [list $EC [self method] -propertyName $propertyName]
+
+        my _autoparams {
+            -applicationName
+            -applicationTierName
+            -artifactName
+            -artifactVersionName
+            -componentName
+            -configName
+            -credentialName
+            -environmentName
+            -environmentTemplateName
+            -environmentTemplateTierName
+            -environmentTierName
+            -extendedContextSearch
+            -flowName
+            -flowRuntimeName
+            -flowRuntimeStateName
+            -flowStateName
+            -flowTransitionName
+            -gatewayName
+            -groupName
+            -jobId
+            -jobStepId
+            -notifierName
+            -objectId
+            -path
+            -pipelineName
+            -pluginName
+            -procedureName
+            -processName
+            -processStepName
+            -projectName
+            -propertySheetId
+            -releaseName
+            -repositoryName
+            -resourceName
+            -resourcePoolName
+            -resourceTemplateName
+            -scheduleName
+            -snapshotName
+            -stageName
+            -stateDefinitionName
+            -stateName
+            -stepName
+            -systemObjectName
+            -taskName
+            -transitionDefinitionName
+            -transitionName
+            -userName
+            -workflowDefinitionName
+            -workflowName
+            -workspaceName
+            -zoneName
+        }
+
+        {*}$cmd
+
+        return $propertyName
+
+    }
+
+    method setProperty { propertyName value {args {
+        {-applicationName             string}
+        {-applicationTierName         string}
+        {-artifactName                string}
+        {-artifactVersionName         string}
+        {-componentName               string}
+        {-configName                  string}
+        {-credentialName              string}
+        {-description                 string}
+        {-environmentName             string}
+        {-environmentTemplateName     string}
+        {-environmentTemplateTierName string}
+        {-environmentTierName         string}
+        {-expandable                  boolean}
+        {-extendedContextSearch       switch}
+        {-flowName                    string}
+        {-flowRuntimeName             string}
+        {-flowRuntimeStateName        string}
+        {-flowStateName               string}
+        {-flowTransitionName          string}
+        {-gatewayName                 string}
+        {-groupName                   string}
+        {-jobId                       commonId}
+        {-jobStepId                   commonId}
+        {-notifierName                string}
+        {-objectId                    commonId}
+        {-path                        string}
+        {-pipelineName                string}
+        {-pluginName                  string}
+        {-procedureName               string}
+        {-processName                 string}
+        {-processStepName             string}
+        {-projectName                 string}
+        {-propertySheetId             commonId}
+        {-releaseName                 string}
+        {-repositoryName              string}
+        {-resourceName                string}
+        {-resourcePoolName            string}
+        {-resourceTemplateName        string}
+        {-scheduleName                string}
+        {-snapshotName                string}
+        {-stageName                   string}
+        {-stateDefinitionName         string}
+        {-stateName                   string}
+        {-stepName                    string}
+        {-systemObjectName            string}
+        {-taskName                    string}
+        {-transitionDefinitionName    string}
+        {-transitionName              string}
+        {-userName                    string}
+        {-workflowDefinitionName      string}
+        {-workflowName                string}
+        {-workspaceName               string}
+        {-zoneName                    string}
+    }} } {
+
+        procarg::parse
+
+        set cmd [list $EC [self method] -propertyName $propertyName -value $value]
+
+        my _autoparams {
+            -applicationName
+            -applicationTierName
+            -artifactName
+            -artifactVersionName
+            -componentName
+            -configName
+            -credentialName
+            -description
+            -environmentName
+            -environmentTemplateName
+            -environmentTemplateTierName
+            -environmentTierName
+            -expandable
+            -extendedContextSearch
+            -flowName
+            -flowRuntimeName
+            -flowRuntimeStateName
+            -flowStateName
+            -flowTransitionName
+            -gatewayName
+            -groupName
+            -jobId
+            -jobStepId
+            -notifierName
+            -objectId
+            -path
+            -pipelineName
+            -pluginName
+            -procedureName
+            -processName
+            -processStepName
+            -projectName
+            -propertySheetId
+            -releaseName
+            -repositoryName
+            -resourceName
+            -resourcePoolName
+            -resourceTemplateName
+            -scheduleName
+            -snapshotName
+            -stageName
+            -stateDefinitionName
+            -stateName
+            -stepName
+            -systemObjectName
+            -taskName
+            -transitionDefinitionName
+            -transitionName
+            -userName
+            -workflowDefinitionName
+            -workflowName
+            -workspaceName
+            -zoneName
+        }
+
+        {*}$cmd
+
+        return $value
+
+    }
+
+    method getPropertyValue { propertyName {args {
         {-applicationName             string}
         {-applicationTierName         string}
         {-artifactName                string}
@@ -259,11 +599,191 @@ package provide ElectricCommanderX 0.0.1
             -zoneName
         }
 
-        return [[{*}$cmd] findvalue "/responses/response/value"]
+        return [{*}$cmd]
 
     }
 
-    method getProjects { } {
+    method getProperties { {args {
+        {-applicationName             string}
+        {-applicationTierName         string}
+        {-artifactName                string}
+        {-artifactVersionName         string}
+        {-componentName               string}
+        {-configName                  string}
+        {-credentialName              string}
+        {-environmentName             string}
+        {-environmentTemplateName     string}
+        {-environmentTemplateTierName string}
+        {-environmentTierName         string}
+        {-expand                      boolean}
+        {-flowName                    string}
+        {-flowRuntimeName             string}
+        {-flowRuntimeStateName        string}
+        {-flowStateName               string}
+        {-flowTransitionName          string}
+        {-gatewayName                 string}
+        {-groupName                   string}
+        {-jobId                       commonId}
+        {-jobStepId                   commonId}
+        {-notifierName                string}
+        {-objectId                    commonId}
+        {-path                        string}
+        {-pipelineName                string}
+        {-pluginName                  string}
+        {-procedureName               string}
+        {-processName                 string}
+        {-processStepName             string}
+        {-projectName                 string}
+        {-propertySheetId             commonId}
+        {-recurse                     switch}
+        {-releaseName                 string}
+        {-repositoryName              string}
+        {-resourceName                string}
+        {-resourcePoolName            string}
+        {-resourceTemplateName        string}
+        {-scheduleName                string}
+        {-snapshotName                string}
+        {-stageName                   string}
+        {-stateDefinitionName         string}
+        {-stateName                   string}
+        {-stepName                    string}
+        {-systemObjectName            string}
+        {-taskName                    string}
+        {-transitionDefinitionName    string}
+        {-transitionName              string}
+        {-userName                    string}
+        {-workflowDefinitionName      string}
+        {-workflowName                string}
+        {-workspaceName               string}
+        {-zoneName                    string}
+    }} } {
+
+        procarg::parse
+
+        set cmd [list $EC [self method]]
+
+        my _autoparams {
+            -applicationName
+            -applicationTierName
+            -artifactName
+            -artifactVersionName
+            -componentName
+            -configName
+            -credentialName
+            -environmentName
+            -environmentTemplateName
+            -environmentTemplateTierName
+            -environmentTierName
+            -expand
+            -flowName
+            -flowRuntimeName
+            -flowRuntimeStateName
+            -flowStateName
+            -flowTransitionName
+            -gatewayName
+            -groupName
+            -jobId
+            -jobStepId
+            -notifierName
+            -objectId
+            -path
+            -pipelineName
+            -pluginName
+            -procedureName
+            -processName
+            -processStepName
+            -projectName
+            -propertySheetId
+            -recurse
+            -releaseName
+            -repositoryName
+            -resourceName
+            -resourcePoolName
+            -resourceTemplateName
+            -scheduleName
+            -snapshotName
+            -stageName
+            -stateDefinitionName
+            -stateName
+            -stepName
+            -systemObjectName
+            -taskName
+            -transitionDefinitionName
+            -transitionName
+            -userName
+            -workflowDefinitionName
+            -workflowName
+            -workspaceName
+            -zoneName
+        }
+
+        set cmdParse [list apply [list {cmdParse obj xpath} {
+
+            set result [list]
+
+            set countSheets [llength [$obj find "$xpath/propertySheet"]]
+
+            for { set i 1 } { $i <= $countSheets } { incr i } {
+
+                set countProps [llength [$obj find "$xpath/propertySheet\[$i\]/property"]]
+
+                for { set j 1 } { $j <= $countProps } { incr j } {
+
+                    set name [$obj findvalue "$xpath/propertySheet\[$i\]/property\[$j\]/propertyName"]
+
+                    if { [llength [$obj find "$xpath/propertySheet\[$i\]/property\[$j\]/propertySheet"]] } {
+
+                        lappend result propertySheet $name [{*}$cmdParse $cmdParse $obj "$xpath/propertySheet\[$i\]/property\[$j\]"]
+
+                    } {
+
+                        lappend result property $name [my _getFields $obj "$xpath/propertySheet\[$i\]/property\[$j\]" {
+                            value
+                            expandable
+                            description
+                        }]
+
+                    }
+
+                }
+
+            }
+
+            return $result
+
+        } [namespace current]]]
+
+        return [{*}$cmdParse $cmdParse [{*}$cmd] "/responses/response"]
+
+    }
+
+    method createProject { projectName {args {
+        {-credentialName string}
+        {-description    string}
+        {-resourceName   string}
+        {-tracked        boolean}
+        {-workspaceName  string}
+    }} } {
+
+        procarg::parse
+
+        set cmd [list $EC [self method] -projectName $projectName]
+
+        my _autoparams {
+            -credentialName
+            -description
+            -resourceName
+            -tracked
+            -workspaceName
+        }
+
+        {*}$cmd
+
+        return $projectName
+
+    }
+
+    method getProjectNames { } {
 
         set obj [$EC getProjects]
 
@@ -318,7 +838,9 @@ package provide ElectricCommanderX 0.0.1
             -foreground
         }
 
-        return [expr { ![llength [[{*}$cmd] findErrors]] }]
+        {*}$cmd
+
+        return $projectName
 
     }
 
@@ -356,6 +878,28 @@ package provide ElectricCommanderX 0.0.1
             }
         }
 
+    }
+
+    method _getFields { obj xpath fields } {
+
+        set result [list]
+
+        foreach field [lsort $fields] {
+
+            set node [lindex [$obj find "$xpath/$field"] 0]
+
+            if { $node ne "" && [$node hasChildNodes] } {
+                dict set result $field [$node text]
+            }
+
+        }
+
+        return $result
+
+    }
+
+    method methodExists { methodName } {
+        return [expr { $methodName in $Methods }]
     }
 
 }

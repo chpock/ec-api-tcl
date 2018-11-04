@@ -159,13 +159,9 @@ namespace eval ::ElectricCommander::Dump::Export {
 
             set name [$obj findvalue "//actualParameter\[$i\]/actualParameterName"]
 
-            set tmp [list]
-
-            lappend tmp {*}[_getFields $obj "//actualParameter\[$i\]" {
+            lappend result -actualParameter $name [_getFields $obj "//actualParameter\[$i\]" {
                 value
             }]
-
-            lappend result -actualParameter $name $tmp
 
         }
 
@@ -185,9 +181,7 @@ namespace eval ::ElectricCommander::Dump::Export {
 
             set name [$obj findvalue "//formalParameter\[$i\]/formalParameterName"]
 
-            set tmp [list]
-
-            lappend tmp {*}[_getFields $obj "//formalParameter\[$i\]" {
+            lappend result -formalParameter $name [_getFields $obj "//formalParameter\[$i\]" {
                 description
                 expansionDeferred
                 label
@@ -195,8 +189,6 @@ namespace eval ::ElectricCommander::Dump::Export {
                 required
                 type
             }]
-
-            lappend result -formalParameter $name $tmp
 
         }
 
@@ -206,7 +198,7 @@ namespace eval ::ElectricCommander::Dump::Export {
 
     proc propertySheet { EC args } {
 
-        set obj [$EC getProperties -recurse 1 {*}$args]
+        set obj [$EC getProperties -expand 0 -recurse 1 {*}$args]
 
         set cmd [list apply [list {cmd obj xpath} {
 
@@ -228,15 +220,11 @@ namespace eval ::ElectricCommander::Dump::Export {
 
                     } {
 
-                        set tmp [list]
-
-                        lappend tmp {*}[_getFields $obj "$xpath/propertySheet\[$i\]/property\[$j\]" {
+                        lappend result -property $name [_getFields $obj "$xpath/propertySheet\[$i\]/property\[$j\]" {
                             value
                             expandable
                             description
                         }]
-
-                        lappend result -property $name $tmp
 
                     }
 

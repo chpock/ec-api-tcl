@@ -22,12 +22,18 @@ namespace eval ::ElectricCommander::Logger {
         namespace eval ::logger::tree::EC {
             proc stdoutcmd {level text} {
                 variable service
-                puts [format {[%s] [%-11s] [%s] %s} [clock format [clock seconds]] $service $level $text]
+                puts [format {[%s] [%-11s] [%s] %s} \
+                    [clock format [clock seconds] -format "%a %b %d %H:%M:%S.[string range [clock milliseconds] end-2 end] %Z %Y"] \
+                    $service $level $text \
+                ]
             }
 
             proc stderrcmd {level text} {
                 variable service
-                puts stderr [format {[%s] [%-11s] [%s] %s} [clock format [clock seconds]] $service $level $text]
+                puts stderr [format {[%s] [%-11s] [%s] %s} \
+                    [clock format [clock seconds] -format "%a %b %d %H:%M:%S.[string range [clock milliseconds] end-2 end] %Z %Y"] \
+                    $service $level $text \
+                ]
             }
         }
 
