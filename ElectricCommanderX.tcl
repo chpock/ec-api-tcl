@@ -182,64 +182,7 @@ package provide ElectricCommanderX 0.0.1
         {-zoneName                    string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method] -value $value]
-
-        my _autoparams {
-            -applicationName
-            -applicationTierName
-            -artifactName
-            -artifactVersionName
-            -componentName
-            -configName
-            -credentialName
-            -environmentName
-            -environmentTemplateName
-            -environmentTemplateTierName
-            -environmentTierName
-            -expand
-            -extendedContextSearch
-            -flowName
-            -flowRuntimeName
-            -flowRuntimeStateName
-            -flowStateName
-            -flowTransitionName
-            -gatewayName
-            -groupName
-            -jobId
-            -jobStepId
-            -notifierName
-            -objectId
-            -path
-            -pipelineName
-            -pluginName
-            -procedureName
-            -processName
-            -processStepName
-            -projectName
-            -propertySheetId
-            -releaseName
-            -repositoryName
-            -resourceName
-            -resourcePoolName
-            -resourceTemplateName
-            -scheduleName
-            -snapshotName
-            -stageName
-            -stateDefinitionName
-            -stateName
-            -stepName
-            -systemObjectName
-            -taskName
-            -transitionDefinitionName
-            -transitionName
-            -userName
-            -workflowDefinitionName
-            -workflowName
-            -workspaceName
-            -zoneName
-        }
+        set cmd [my _makeCommand -args [list -value $value]]
 
         return [[{*}$cmd] findvalue "/responses/response/value"]
 
@@ -299,65 +242,7 @@ package provide ElectricCommanderX 0.0.1
         {-zoneName                    string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method] -propertyName $propertyName]
-
-        my _autoparams {
-            -applicationName
-            -applicationTierName
-            -artifactName
-            -artifactVersionName
-            -componentName
-            -configName
-            -credentialName
-            -environmentName
-            -environmentTemplateName
-            -environmentTemplateTierName
-            -environmentTierName
-            -extendedContextSearch
-            -flowName
-            -flowRuntimeName
-            -flowRuntimeStateName
-            -flowStateName
-            -flowTransitionName
-            -gatewayName
-            -groupName
-            -jobId
-            -jobStepId
-            -notifierName
-            -objectId
-            -path
-            -pipelineName
-            -pluginName
-            -procedureName
-            -processName
-            -processStepName
-            -projectName
-            -propertySheetId
-            -releaseName
-            -repositoryName
-            -resourceName
-            -resourcePoolName
-            -resourceTemplateName
-            -scheduleName
-            -snapshotName
-            -stageName
-            -stateDefinitionName
-            -stateName
-            -stepName
-            -systemObjectName
-            -taskName
-            -transitionDefinitionName
-            -transitionName
-            -userName
-            -workflowDefinitionName
-            -workflowName
-            -workspaceName
-            -zoneName
-        }
-
-        {*}$cmd
+        {*}[my _makeCommand -args [list -propertyName $propertyName]]
 
         return $propertyName
 
@@ -419,67 +304,7 @@ package provide ElectricCommanderX 0.0.1
         {-zoneName                    string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method] -propertyName $propertyName -value $value]
-
-        my _autoparams {
-            -applicationName
-            -applicationTierName
-            -artifactName
-            -artifactVersionName
-            -componentName
-            -configName
-            -credentialName
-            -description
-            -environmentName
-            -environmentTemplateName
-            -environmentTemplateTierName
-            -environmentTierName
-            -expandable
-            -extendedContextSearch
-            -flowName
-            -flowRuntimeName
-            -flowRuntimeStateName
-            -flowStateName
-            -flowTransitionName
-            -gatewayName
-            -groupName
-            -jobId
-            -jobStepId
-            -notifierName
-            -objectId
-            -path
-            -pipelineName
-            -pluginName
-            -procedureName
-            -processName
-            -processStepName
-            -projectName
-            -propertySheetId
-            -releaseName
-            -repositoryName
-            -resourceName
-            -resourcePoolName
-            -resourceTemplateName
-            -scheduleName
-            -snapshotName
-            -stageName
-            -stateDefinitionName
-            -stateName
-            -stepName
-            -systemObjectName
-            -taskName
-            -transitionDefinitionName
-            -transitionName
-            -userName
-            -workflowDefinitionName
-            -workflowName
-            -workspaceName
-            -zoneName
-        }
-
-        {*}$cmd
+        {*}[my _makeCommand -args [list -propertyName $propertyName -value $value]]
 
         return $value
 
@@ -540,66 +365,7 @@ package provide ElectricCommanderX 0.0.1
         {-zoneName                    string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method] -propertyName $propertyName]
-
-        my _autoparams {
-            -applicationName
-            -applicationTierName
-            -artifactName
-            -artifactVersionName
-            -componentName
-            -configName
-            -credentialName
-            -environmentName
-            -environmentTemplateName
-            -environmentTemplateTierName
-            -environmentTierName
-            -expand
-            -extendedContextSearch
-            -flowName
-            -flowRuntimeName
-            -flowRuntimeStateName
-            -flowStateName
-            -flowTransitionName
-            -gatewayName
-            -groupName
-            -jobId
-            -jobStepId
-            -notifierName
-            -objectId
-            -path
-            -pipelineName
-            -pluginName
-            -procedureName
-            -processName
-            -processStepName
-            -projectName
-            -propertySheetId
-            -releaseName
-            -repositoryName
-            -resourceName
-            -resourcePoolName
-            -resourceTemplateName
-            -scheduleName
-            -snapshotName
-            -stageName
-            -stateDefinitionName
-            -stateName
-            -stepName
-            -systemObjectName
-            -taskName
-            -transitionDefinitionName
-            -transitionName
-            -userName
-            -workflowDefinitionName
-            -workflowName
-            -workspaceName
-            -zoneName
-        }
-
-        return [{*}$cmd]
+        return [{*}[my _makeCommand -args [list -propertyName $propertyName]]]
 
     }
 
@@ -658,65 +424,6 @@ package provide ElectricCommanderX 0.0.1
         {-zoneName                    string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method]]
-
-        my _autoparams {
-            -applicationName
-            -applicationTierName
-            -artifactName
-            -artifactVersionName
-            -componentName
-            -configName
-            -credentialName
-            -environmentName
-            -environmentTemplateName
-            -environmentTemplateTierName
-            -environmentTierName
-            -expand
-            -flowName
-            -flowRuntimeName
-            -flowRuntimeStateName
-            -flowStateName
-            -flowTransitionName
-            -gatewayName
-            -groupName
-            -jobId
-            -jobStepId
-            -notifierName
-            -objectId
-            -path
-            -pipelineName
-            -pluginName
-            -procedureName
-            -processName
-            -processStepName
-            -projectName
-            -propertySheetId
-            -recurse
-            -releaseName
-            -repositoryName
-            -resourceName
-            -resourcePoolName
-            -resourceTemplateName
-            -scheduleName
-            -snapshotName
-            -stageName
-            -stateDefinitionName
-            -stateName
-            -stepName
-            -systemObjectName
-            -taskName
-            -transitionDefinitionName
-            -transitionName
-            -userName
-            -workflowDefinitionName
-            -workflowName
-            -workspaceName
-            -zoneName
-        }
-
         set cmdParse [list apply [list {cmdParse obj xpath} {
 
             set result [list]
@@ -753,7 +460,7 @@ package provide ElectricCommanderX 0.0.1
 
         } [namespace current]]]
 
-        return [{*}$cmdParse $cmdParse [{*}$cmd] "/responses/response"]
+        return [{*}$cmdParse $cmdParse [{*}[my _makeCommand]] "/responses/response"]
 
     }
 
@@ -765,19 +472,7 @@ package provide ElectricCommanderX 0.0.1
         {-workspaceName  string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method] -projectName $projectName]
-
-        my _autoparams {
-            -credentialName
-            -description
-            -resourceName
-            -tracked
-            -workspaceName
-        }
-
-        {*}$cmd
+        {*}[my _makeCommand -args [list -projectName $projectName]]
 
         return $projectName
 
@@ -804,13 +499,7 @@ package provide ElectricCommanderX 0.0.1
         {-file     string}
     }} } {
 
-        procarg::parse
-
-        set cmd [list $EC [self method] -path $path]
-
-        my _autoparams {
-            -withAcls
-        }
+        set cmd [my _makeCommand -args [list -path $path] -ignore {-file}]
 
         set result [[{*}$cmd] findvalue "/responses/response/value"]
 
@@ -832,13 +521,7 @@ package provide ElectricCommanderX 0.0.1
         {-foreground switch}
     }} } {
 
-        set cmd [list $EC [self method] -projectName $projectName]
-
-        my _autoparams {
-            -foreground
-        }
-
-        {*}$cmd
+        {*}[my _makeCommand -args [list -projectName $projectName]]
 
         return $projectName
 
@@ -848,8 +531,6 @@ package provide ElectricCommanderX 0.0.1
         {-raw     switch}
         {-project string}
     }} } {
-
-        procarg::parse
 
         if { [info exists opts(-project)] } {
 
@@ -867,16 +548,39 @@ package provide ElectricCommanderX 0.0.1
 
     }
 
-    method _autoparams { params } {
+    method _makeCommand { {args {
+        {-args   list -default {}}
+        {-method string}
+        {-ignore list -default {}}
+    }} } {
+
+        if { ![info exists opts(-method)] } {
+            set opts(-method) [uplevel 1 [list self method]]
+        }
+
+        return [concat \
+            [list $EC $opts(-method)] \
+            $opts(-args) \
+            [uplevel 1 [list my _autoparams $opts(-ignore)]] \
+         ]
+
+    }
+
+    method _autoparams { ignoreParams } {
 
         upvar 1 opts opts
-        upvar 1 cmd  cmd
 
-        foreach param $params {
-            if { [info exists opts($param)] } {
+        set cmd [list]
+
+        set method [uplevel 1 [list self method]]
+
+        dict for { param - } [::procarg::getregistration $method] {
+            if { $param ni $ignoreParams && [info exists opts($param)] } {
                 lappend cmd $param $opts($param)
             }
         }
+
+        return $cmd
 
     }
 
