@@ -1,0 +1,24 @@
+#!/usr/bin/env tclsh
+
+source [file join [file dirname [info script]] common.tcl]
+
+set testProject "${testProject}-projects"
+
+test "projects - deleteProject - initial" {} -setup {
+} -body {
+    deleteProject $::testProject
+} -result $testProject
+
+test "projects - createProject - project doesn't exist" {} -body {
+    createProject $::testProject
+} -match glob -result "projectId * projectName $testProject *"
+
+test "projects - createProject - project exists" {} -body {
+    createProject $::testProject
+} -returnCodes {error} -match regexp -result {^error \[DuplicateProjectName\]: Project '.*' already exists}
+
+test "projects - createProject - project exists + overwrite" {} -body {
+    createProject $::testProject -overwrite
+} -match glob -result "projectId * projectName $testProject *"
+
+::tcltest::cleanupTests

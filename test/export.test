@@ -1,0 +1,84 @@
+#!/usr/bin/env tclsh
+
+source [file join [file dirname [info script]] common.tcl]
+
+#set projects [list "CVS" "CheckServer"]
+set projects [list "CheckServer"]
+#set projects [list "CVS"]
+
+test "init - source EC" {} -body {
+
+    if { ![info exists ::env(EC_SRC_USER)] } {
+        error "environment variable EC_SRC_USER is not defined"
+    }
+    if { ![info exists ::env(EC_SRC_PASS)] } {
+        error "environment variable EC_SRC_PASS is not defined"
+    }
+    if { ![info exists ::env(EC_SRC_HOST)] } {
+        error "environment variable EC_SRC_HOST is not defined"
+    }
+
+    set ::ecsrc [ElectricCommander new -server $::env(EC_SRC_HOST) -retry 0 -debug 0]
+    $::ecsrc login $::env(EC_SRC_USER) $::env(EC_SRC_PASS)
+
+} -match regexp -result "^sessionId \[0-9A-Z\]{16} userName $::env(EC_SRC_USER)\$"
+
+foreach project $projects {
+
+    test "exportProject $project" {} -body {
+
+        set ::dump_file_ectcl_src [getTestFilename "${::project}_src.ectcl"]
+        set ::dump_file_ectcl_dst [getTestFilename "${::project}_dst.ectcl"]
+        set ::dump_file_groovy_src [getTestFilename "${::project}_src.groovy"]
+        set ::dump_file_groovy_dst [getTestFilename "${::project}_dst.groovy"]
+
+        test "exportProject $::project - run ectcl export - source" {} -body {
+            $::ecsrc export -projectName $::project -file $::dump_file_ectcl_src
+        } -match glob -result *
+
+        test "exportProject $::project - run groovy export - source" {} -body {
+            $::ecsrc generateDsl "/projects/$::project" -withAcls -file $::dump_file_groovy_src
+        } -match glob -result *
+
+        test "exportProject $::project - run ectcl import" {} -body {
+
+            set fp [open $::dump_file_ectcl_src r]
+            fconfigure $fp -encoding utf-8
+            set dump [read $fp]
+            close $fp
+
+            deleteProject $::project
+
+            {*}$dump
+
+        } -match glob -result *
+
+        test "exportProject $::project - run ectcl export - destination" {} -body {
+            export -projectName $::project -file $::dump_file_ectcl_dst
+        } -match glob -result *
+
+        test "exportProject $::project - run groovy export - destination" {} -body {
+            generateDsl "/projects/$::project" -withAcls -file $::dump_file_groovy_dst
+        } -match glob -result *
+
+        test "exportProject $::project - diff ectcl" {} -body {
+
+           catch [list exec [auto_execok diff] -rubBaN $::dump_file_ectcl_src $::dump_file_ectcl_dst] result
+
+           return $result
+
+        } -result ""
+
+        test "exportProject $::project - diff groovy" {} -body {
+
+           catch [list exec [auto_execok diff] -rubBaN $::dump_file_groovy_src $::dump_file_groovy_dst] result
+
+           return $result
+
+        } -result ""
+
+    } -match glob -result *
+
+}
+
+::tcltest::cleanupTests

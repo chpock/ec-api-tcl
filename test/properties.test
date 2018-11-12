@@ -1,0 +1,39 @@
+#!/usr/bin/env tclsh
+
+source [file join [file dirname [info script]] common.tcl]
+
+set testProject "${testProject}-properties"
+
+createProject $testProject -overwrite
+
+test "properties - setProperty1" {} -body {
+    setProperty "p1" "v1" -projectName $::testProject
+    getPropertyValue "p1" -projectName $::testProject
+} -result "v1"
+
+test "properties - setProperty2" {} -body {
+    setProperty "p2/p3" "v2" -projectName $::testProject
+    getPropertyValue "p2/p3" -projectName $::testProject
+} -result "v2"
+
+test "properties - props non recursive" {} -body {
+    getProperties -projectName $::testProject
+} -result "property p2 {} property p1 {expandable 1 value v1}"
+
+test "properties - props recursive" {} -body {
+    getProperties -projectName $::testProject -recurse
+} -result "propertySheet p2 {property p3 {expandable 1 value v2}} property p1 {expandable 1 value v1}"
+
+test "properties - sub props" {} -body {
+    getProperties -projectName $::testProject -path "p2"
+} -result "property p3 {expandable 1 value v2}"
+
+test "properties - deleteProperty" {} -body {
+    deleteProperty "p2/p3" -projectName $::testProject
+} -result "p2/p3"
+
+test "properties - props recursive after delete" {} -body {
+    getProperties -projectName $::testProject -recurse
+} -result "propertySheet p2 {} property p1 {expandable 1 value v1}"
+
+::tcltest::cleanupTests
